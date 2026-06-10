@@ -1,13 +1,19 @@
 import os
+import sys
 import json
 import shutil
+
+# Ensure imports work whether running from backend/ or repo root
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from backend.rag_engine import RAGEngine
-from backend.llm_client import LLMClient
-from backend.tracker import MLflowTracker
+from rag_engine import RAGEngine
+from llm_client import LLMClient
+from tracker import MLflowTracker
 from eval.evaluator import RAGEvaluator
 
 app = FastAPI(title="RAG Eval & Tracking System")
