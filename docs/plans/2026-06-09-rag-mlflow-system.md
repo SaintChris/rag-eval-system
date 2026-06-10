@@ -1,7 +1,7 @@
 # RAG Document Q&A with MLflow Tracking — Project Summary
 
 > **Status:** COMPLETE and verified live (2026-06-10)
-> **URL:** http://localhost:8001/docs (FastAPI), http://localhost:5001 (MLflow)
+> **Repo:** https://github.com/SaintChris/rag-eval-system
 
 ## What Was Built
 
@@ -18,7 +18,7 @@ A production-grade RAG pipeline running entirely on an M1 Mac (16GB RAM) with ze
 
 ## Verified Working
 
-- PDF upload and indexing (3 PDFs tested)
+- PDF upload and indexing
 - Streaming Q&A with source citations
 - Evaluation suite with MLflow logging
 - All 6 tests passing
@@ -28,8 +28,8 @@ A production-grade RAG pipeline running entirely on an M1 Mac (16GB RAM) with ze
 
 | Service | Port | Reason |
 |---------|------|--------|
-| FastAPI | 8001 | Honcho occupies 8000 |
-| MLflow | 5001 | macOS Control Center occupies 5000 |
+| FastAPI | 8001 | Avoids conflict with services on 8000 |
+| MLflow | 5001 | Avoids conflict with macOS Control Center on 5000 |
 
 ## Key Deviations from Original Plan
 
@@ -40,10 +40,12 @@ A production-grade RAG pipeline running entirely on an M1 Mac (16GB RAM) with ze
 | PostgreSQL + pgvector in docker-compose | Removed — not used | App uses ChromaDB + SQLite, no Postgres needed |
 | Tests call real Ollama | All external calls mocked | Tests run in 30s vs minutes, no model files required |
 | Port 8000 (FastAPI), 5000 (MLflow) | 8001 and 5001 | Port conflicts on macOS |
+| Personal data in seed/golden dataset | Generic placeholder data | Keep repo clean of personal info |
 
 ## Git History
 
 ```
+988b723  docs: update README with verified findings, ports, tests, known issues
 14af25b  fix: change ports to avoid conflicts (MLflow 5000->5001, FastAPI 8000->8001)
 a0d70d7  fix: correct eval params, mock slow tests, clean docker-compose
 329fbd5  fix: make imports work when running from backend/ or repo root
@@ -56,7 +58,7 @@ c1402b1  feat: complete RAG + MLflow system implementation
 
 ## Next Steps (Portfolio)
 
-1. Write blog post (Medium/Dev.to) — "I Built a Production RAG System on My M1 Mac for $0"
+1. Write blog post — "I Built a Production RAG System on My M1 Mac for $0"
 2. Record demo video / GIF of the chat UI + eval suite
-3. Add to saintlex.sbs portfolio page
+3. Add to portfolio page
 4. Move to Project 2: Hermes MLOps case study
