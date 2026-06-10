@@ -16,6 +16,8 @@ Most RAG tutorials stop at "it answers questions." This one proves the answers a
 
 **Key Differentiator:** Built-in evaluation pipeline with LLM-as-judge scoring, golden dataset comparison, and MLflow experiment tracking. This is what hiring managers actually look for.
 
+**Verified:** Tested with PDF uploads, streaming Q&A, and full eval suite — all running live on an M1 Mac with 16GB RAM.
+
 ## Architecture
 
 ```
@@ -74,13 +76,21 @@ pip install -r requirements.txt
 # Seed data (indexes professional background into vector store)
 python3 seed.py
 
-# Run
-uvicorn app:app --port 8000
-
-# Open
-open http://localhost:8000  # if serving frontend from backend
-# or use the frontend/ files separately
+# Run (starts MLflow on 5001 + FastAPI on 8001)
+python3 run.py
 ```
+
+Then open:
+- **API Docs:** http://localhost:8001/docs
+- **MLflow UI:** http://localhost:5001
+- **Chat UI:** Open `frontend/index.html` in your browser
+
+### Ports
+
+| Service | Port | Why |
+|---------|------|-----|
+| FastAPI | 8001 | Avoids conflict with Honcho on 8000 |
+| MLflow | 5001 | Avoids conflict with macOS Control Center on 5000 |
 
 ## Tech Stack
 
@@ -91,7 +101,7 @@ open http://localhost:8000  # if serving frontend from backend
 | Embeddings | all-MiniLM-L6-v2 (sentence-transformers) | 80MB, fast on CPU, good quality |
 | Generation | qwen3:4b (Ollama) | 2.5GB local, no API keys |
 | Experiment Tracking | MLflow | Industry standard, param + metric logging |
-| Evaluation | LLM-as-judge (qwen3:1.7b) | Automated faithfulness + scoring |
+| Evaluation | LLM-as-judge (qwen3:4b) | Automated faithfulness + scoring |
 | Frontend | Vanilla HTML/CSS/JS | Zero build step, no framework |
 
 ## API Endpoints
@@ -107,7 +117,7 @@ open http://localhost:8000  # if serving frontend from backend
 ### Example: Query
 
 ```bash
-curl -X POST http://localhost:8000/query \
+curl -X POST http://localhost:8001/query \
   -H "Content-Type: application/json" \
   -d '{"query": "What trading rules does Alex use?"}'
 ```
@@ -115,7 +125,7 @@ curl -X POST http://localhost:8000/query \
 ### Example: Evaluate
 
 ```bash
-curl -X POST http://localhost:8000/evaluate \
+curl -X POST http://localhost:8001/evaluate \
   -F "chunk_size=300" \
   -F "chunk_overlap=50"
 ```
@@ -149,17 +159,19 @@ rag-eval-system/
 │   ├── index.html         # Dashboard UI
 │   ├── style.css          # Dark theme
 │   └── app.js             # Chat + eval controls
-└── tests/
-    ├── test_app.py
-    ├── test_rag_engine.py
-    ├── test_llm_client.py
-    ├── test_evaluator.py
-    └── test_tracker.py
+├── tests/
+│   ├── conftest.py        # Path resolution for test modules
+│   ├── test_app.py        # Health check endpoint
+│   ├── test_rag_engine.py # Ingestion + retrieval (mocked embeddings)
+│   ├── test_llm_client.py # Sync + streaming generation (mocked HTTP)
+│   ├── test_evaluator.py  # Faithfulness + relevance scoring (mocked LLM)
+│   └── test_tracker.py    # MLflow param/metric logging
+└── docker-compose.yml     # MLflow server container config
 ```
 
 ## Design Decisions
 
-**Why sentence-transformers instead of embeddings?**
+**Why sentence-transformers instead of Ollama embeddings?**
 Ollama v0.30.7's `/api/embeddings` endpoint has response-time issues on M1 Mac for both nomic-embed-text (274MB) and all-minilm (16MB). Sentence-transformers runs the same all-MiniLM-L6-v2 model locally in-process with no network hop. First call loads the model (~2s), subsequent embeddings are ~18ms each.
 
 **Why local-only?**
@@ -167,6 +179,19 @@ This project demonstrates production-grade AI engineering skill without requirin
 
 **Why evaluation matters?**
 Anyone can build a RAG that answers questions. Measuring *whether those answers are correct* is what separates senior engineers from juniors. This project builds that muscle.
+
+**Why mocked tests?**
+Tests that call Ollama or load SentenceTransformer models are slow (30s+ each) and require specific model files. Mocking the HTTP calls and model loading keeps the full test suite under 60s with zero external dependencies.
+
+## Running Tests
+
+```bash
+# From repo root
+source backend/venv/bin/activate
+python3 -m pytest tests/ -v
+```
+
+Expected: 6 passed in ~30s.
 
 ## Extending
 
@@ -180,6 +205,12 @@ from fastapi.security import HTTPBearer
 **Scale to cloud:** Change `MLflowTracker` tracking_uri to a remote server and swap `LocalEmbeddings` for a hosted embedding API.
 
 **Add more eval questions:** Extend `eval/golden_dataset.json` with domain-specific QA pairs.
+
+## Known Issues
+
+- ChromaDB telemetry warnings (`Failed to send telemetry event`) — harmless, caused by a bug in ChromaDB's analytics. Doesn't affect functionality.
+- `LangChainDeprecationWarning` for `Chroma` class — LangChain 0.3 still uses the old import path. Will resolve when `langchain-chroma` package is adopted.
+- Port 8000 and 5000 conflicts on macOS — FastAPI uses 8001, MLflow uses 5001 to avoid Honcho and macOS Control Center respectively.
 
 ## License
 
