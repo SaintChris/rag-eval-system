@@ -1,16 +1,34 @@
+"""
+RAG Engine using SentenceTransformers for local embeddings.
+Bypasses Ollama's slow /api/embeddings endpoint.
+"""
 import os
+import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import OllamaEmbeddings
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+
+
+class LocalEmbeddings(Embeddings):
+    """Wraps a sentence-transformers model toLangChain's Embeddings interface."""
+    def __init__(self, model_name="all-MiniLM-L6-v2"):
+        from sentence_transformers import SentenceTransformer
+        print(f"Loading SentenceTransformer model: {model_name}...")
+        self.model = SentenceTransformer(model_name)
+        print(f"Model loaded. Embedding dim: {self.model.get_sentence_embedding_dimension()}")
+
+    def embed_documents(self, texts):
+        return self.model.encode(texts, show_progress_bar=False).tolist()
+
+    def embed_query(self, text):
+        return self.model.encode([text], show_progress_bar=False)[0].tolist()
 
 
 class RAGEngine:
-    def __init__(self, persist_directory="./chroma_db", embedding_model="all-minilm"):
+    def __init__(self, persist_directory="./chroma_db"):
         self.persist_directory = persist_directory
-        self.embeddings = OllamaEmbeddings(
-            model=embedding_model,
-            base_url="http://localhost:11434"
-        )
+        self.embeddings = LocalEmbeddings()
         self.vector_store = None
         self._init_db()
 
@@ -22,7 +40,6 @@ class RAGEngine:
             )
 
     def index_text(self, text: str, chunk_size: int = 500, chunk_overlap: int = 50, metadata: dict = None):
-        from langchain_core.documents import Document
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap
