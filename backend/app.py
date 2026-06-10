@@ -135,7 +135,7 @@ def evaluate_endpoint(chunk_size: int = Form(500), chunk_overlap: int = Form(50)
         tracker.log_params({
             "chunk_size": chunk_size,
             "chunk_overlap": chunk_overlap,
-            "embedding_model": "nomic-embed-text",
+            "embedding_model": "all-MiniLM-L6-v2",
             "llm_model": "qwen3:4b",
             "eval_size": num_questions
         })

@@ -4,6 +4,7 @@ Bypasses Ollama's slow /api/embeddings endpoint.
 """
 import os
 import numpy as np
+from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
@@ -13,7 +14,6 @@ from langchain_core.embeddings import Embeddings
 class LocalEmbeddings(Embeddings):
     """Wraps a sentence-transformers model toLangChain's Embeddings interface."""
     def __init__(self, model_name="all-MiniLM-L6-v2"):
-        from sentence_transformers import SentenceTransformer
         print(f"Loading SentenceTransformer model: {model_name}...")
         self.model = SentenceTransformer(model_name)
         print(f"Model loaded. Embedding dim: {self.model.get_sentence_embedding_dimension()}")

@@ -9,7 +9,7 @@ def main():
     mlflow_env["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow.db"
     mlflow_process = subprocess.Popen(
         [sys.executable, "-m", "mlflow", "server",
-         "--host", "0.0.0.0", "--port", "5000",
+         "--host", "127.0.0.1", "--port", "5000",
          "--backend-store-uri", "sqlite:///mlflow.db",
          "--default-artifact-root", "./mlruns"],
         cwd=os.path.dirname(os.path.abspath(__file__)),
@@ -22,7 +22,7 @@ def main():
     try:
         subprocess.run(
             [sys.executable, "-m", "uvicorn", "app:app",
-             "--host", "0.0.0.0", "--port", "8000"],
+             "--host", "127.0.0.1", "--port", "8000"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
             check=True
         )
