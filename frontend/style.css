@@ -1,0 +1,160 @@
+:root {
+    --bg-color: #121214;
+    --card-bg: #1a1a1e;
+    --text-color: #e1e1e6;
+    --text-muted: #8d8d99;
+    --primary: #00e676;
+    --secondary: #2979ff;
+    --success: #00e676;
+    --border-color: #29292e;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+h1 {
+    margin: 0;
+    color: #fff;
+}
+
+.subtitle {
+    color: var(--text-muted);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 20px;
+}
+
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input[type="number"],
+input[type="text"],
+input[type="file"] {
+    width: 100%;
+    padding: 10px;
+    background-color: #121214;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: #fff;
+    box-sizing: border-box;
+}
+
+.btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background 0.2s;
+}
+
+.btn-primary { background-color: var(--primary); color: #000; }
+.btn-secondary { background-color: var(--secondary); color: #fff; }
+.btn-success { background-color: var(--success); color: #000; }
+
+.chat-box {
+    height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    border-radius: 4px;
+    background-color: #121214;
+    margin-bottom: 15px;
+}
+
+.chat-message {
+    margin-bottom: 15px;
+}
+
+.chat-message.user { text-align: right; color: var(--primary); }
+.chat-message.assistant { text-align: left; }
+
+.sources {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-color);
+}
+
+.hidden { display: none !important; }
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.metric-box {
+    background-color: #121214;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+    text-align: center;
+}
+
+.metric-label {
+    display: block;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.metric-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+th, td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    border-bottom: 2px solid var(--border-color);
+}

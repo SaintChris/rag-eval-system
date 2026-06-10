@@ -1,0 +1,17 @@
+[
+  {
+    "id": "q1",
+    "question": "What is Alex's background and core stack?",
+    "reference": "Alex is an MLOps and AI Engineer with 4 years of IT operations experience. His core stack includes Python, Docker, PostgreSQL, Prometheus, Grafana, and tools like LangChain and MLflow."
+  },
+  {
+    "id": "q2",
+    "question": "Describe Alex's flagship multi-agent system project.",
+    "reference": "Alex built a flagship 6-agent AI system running entirely on local architecture (M1 Mac) and free services. It handled over 22,000 requests, has 52 test cases, and runs with $0 cloud spend."
+  },
+  {
+    "id": "q3",
+    "question": "What are Alex's trading execution rules?",
+    "reference": "Alex trades MNQ1 only with 0.25 contracts and a stop loss of 200-334 ticks. He has a limit of 3 trades per day and stops after 2 losses, with a max daily loss of $500."
+  }
+]
