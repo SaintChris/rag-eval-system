@@ -5,7 +5,7 @@ from langchain_community.embeddings import OllamaEmbeddings
 
 
 class RAGEngine:
-    def __init__(self, persist_directory="./chroma_db", embedding_model="nomic-embed-text"):
+    def __init__(self, persist_directory="./chroma_db", embedding_model="all-minilm"):
         self.persist_directory = persist_directory
         self.embeddings = OllamaEmbeddings(
             model=embedding_model,
