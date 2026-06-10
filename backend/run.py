@@ -4,12 +4,12 @@ import os
 
 
 def main():
-    print("Starting MLflow Tracking Server on port 5000...")
+    print("Starting MLflow Tracking Server on port 5001...")
     mlflow_env = os.environ.copy()
     mlflow_env["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow.db"
     mlflow_process = subprocess.Popen(
         [sys.executable, "-m", "mlflow", "server",
-         "--host", "127.0.0.1", "--port", "5000",
+         "--host", "127.0.0.1", "--port", "5001",
          "--backend-store-uri", "sqlite:///mlflow.db",
          "--default-artifact-root", "./mlruns"],
         cwd=os.path.dirname(os.path.abspath(__file__)),
@@ -18,11 +18,11 @@ def main():
         stderr=subprocess.DEVNULL
     )
 
-    print("Starting FastAPI Backend on port 8000...")
+    print("Starting FastAPI Backend on port 8001...")
     try:
         subprocess.run(
             [sys.executable, "-m", "uvicorn", "app:app",
-             "--host", "127.0.0.1", "--port", "8000"],
+             "--host", "127.0.0.1", "--port", "8001"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
             check=True
         )

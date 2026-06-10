@@ -1,4 +1,4 @@
-const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = "http://localhost:8001";
 
 document.getElementById("chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
