@@ -12,9 +12,10 @@ Fixes:
 """
 import os
 import json
+import time
 import httpx
 import numpy as np
-from typing import Optional
+from typing import Optional, List, Dict, Any, Generator, Union
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
@@ -29,21 +30,45 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"          # Local, fast, good quality
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # Local re-ranker
 
 # OpenRouter models — API key set via OPENROUTOR_API_KEY env var
-LLM_MODEL = "qwen/qwen3-coder:free"           # RAG answer generation — strong reasoning
+LLM_MODEL = "openrouter/owl-alpha"           # RAG answer generation — Alex's primary model
 JUDGE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"  # Evaluation judge — stronger than generator
 QUERY_EXPAND_MODEL = "google/gemma-4-26b-a4b-it:free"   # Query expansion — fast, creative
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+def _load_openrouter_key() -> str:
+    """Load OpenRouter key from Hermes .env or local .env."""
+    # Try Hermes .env first (used by gateway)
+    hermes_env = os.path.expanduser("~/.hermes/.env")
+    if os.path.exists(hermes_env):
+        with open(hermes_env) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("OPENROUTER_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if key and "***" not in key:
+                        return key
+    # Try local .env
+    local_env = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(local_env):
+        with open(local_env) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("OPENROUTER_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if key and "***" not in key:
+                        return key
+    return os.environ.get("OPENROUTER_API_KEY", "")
+
+OPENROUTER_API_KEY = _load_openrouter_key()
 
 
 # ── OpenRouter Client ───────────────────────────────────────────────
 
 def call_openrouter(model: str, prompt: str, system_prompt: str = "",
-                     temperature: float = 0.2, max_tokens: int = 2048) -> str:
-    """Call any OpenRouter model. Falls back to local Ollama if no API key."""
+                     temperature: float = 0.2, max_tokens: int = 2048,
+                     retries: int = 3) -> str:
+    """Call any OpenRouter model with rate-limit retry. Falls back to Ollama."""
     if not OPENROUTER_API_KEY:
-        # Fallback to local Ollama
         return call_ollama(prompt, system_prompt, temperature)
 
     url = f"{OPENROUTER_BASE}/chat/completions"
@@ -56,13 +81,22 @@ def call_openrouter(model: str, prompt: str, system_prompt: str = "",
         "temperature": temperature,
         "max_tokens": max_tokens
     }
-    with httpx.Client(timeout=120.0) as client:
-        resp = client.post(url, json=payload, headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://github.com/SaintChris/rag-eval-system"
-        })
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+    for attempt in range(retries):
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(url, json=payload, headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://github.com/SaintChris/rag-eval-system"
+            })
+            if resp.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                print(f"[openrouter] Rate limited, retrying in {wait}s...")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+    # Fallback to Ollama after retries exhausted
+    print("[openrouter] Retries exhausted, falling back to Ollama")
+    return call_ollama(prompt, system_prompt, temperature)
 
 
 def call_ollama(prompt: str, system_prompt: str = "", temperature: float = 0.2,
@@ -223,8 +257,9 @@ class RAGEngineV2:
         if not self.vector_store:
             return []
 
-        # Step 1: Query expansion
+        # Step 1: Query expansion (with rate-limit delay)
         if use_expansion:
+            time.sleep(1)  # Rate-limit spacing
             queries = expand_query(query)
         else:
             queries = [query]
@@ -260,7 +295,7 @@ class RAGEngineV2:
     # ── Generation with source citation ──
 
     def generate_answer(self, query: str, docs: list[Document],
-                        stream: bool = True) -> str | iter:
+                        stream: bool = True):
         """
         Generate answer with source citations (Fix #8).
         Uses Qwen3 Coder for generation — strong reasoning, long context.
@@ -308,35 +343,9 @@ Rules:
 
         def _gen():
             if OPENROUTER_API_KEY:
-                # Streaming via OpenRouter
-                url = f"{OPENROUTER_BASE}/chat/completions"
-                payload = {
-                    "model": LLM_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.2,
-                    "stream": True
-                }
-                with httpx.stream("POST", url, json=payload,
-                                  headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-                                  timeout=120.0) as resp:
-                    resp.raise_for_status()
-                    buffer = ""
-                    for line in resp.iter_lines():
-                        if line and line.startswith("data: "):
-                            data_str = line[6:]
-                            if data_str == "[DONE]":
-                                break
-                            try:
-                                chunk = json.loads(data_str)
-                                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                token = delta.get("content", "")
-                                if token:
-                                    yield token
-                            except json.JSONDecodeError:
-                                continue
+                # Use non-streaming for reliability (streaming has CDN issues on free tier)
+                result = call_openrouter(LLM_MODEL, prompt, system, temperature=0.2, max_tokens=2048)
+                yield result
             else:
                 result = call_ollama(prompt, system, temperature=0.2)
                 yield result
@@ -350,6 +359,7 @@ Rules:
               use_expansion: bool = True) -> dict:
         """Full RAG pipeline: retrieve + generate."""
         docs = self.retrieve(query, k=k, use_expansion=use_expansion)
+        time.sleep(1)  # Rate-limit spacing before generation
         answer = "".join(self.generate_answer(query, docs, stream=False))
 
         # Update conversation memory (Fix #5)

@@ -1,10 +1,4 @@
-backend/venv/
 __pycache__/
 *.pyc
-.DS_Store
-chroma_db/
-mlruns/
-mlflow.db
-*.egg-info/
-dist/
-build/
+.env
+.venv/
