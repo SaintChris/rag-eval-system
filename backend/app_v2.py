@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from rag_engine_v2 import RAGEngineV2
-from evaluator_v2 import RAGEvaluatorV2
+from eval.evaluator_v2 import RAGEvaluatorV2
 from backend.tracker import MLflowTracker
 
 app = FastAPI(title="RAG Eval & Tracking System v2")
@@ -117,11 +117,12 @@ async def query_endpoint(req: QueryRequest):
             use_expansion=req.use_expansion
         )
 
-        def stream_response():
-            yield f"__METADATA__:{json.dumps(result['sources'])}\n"
-            yield result["answer"]
-
-        return StreamingResponse(stream_response(), media_type="text/event-stream")
+        # Return as JSON instead of streaming (avoids chunked transfer issues)
+        return {
+            "answer": result["answer"],
+            "sources": result["sources"],
+            "num_docs": result["num_docs"],
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

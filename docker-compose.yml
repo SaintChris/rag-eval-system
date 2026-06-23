@@ -1,12 +1,15 @@
 version: '3.8'
 
 services:
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+  rag:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
-      - "5000:5000"
+      - "8000:8000"
     volumes:
-      - ./mlruns:/mlflow/artifacts
-    environment:
-      MLFLOW_BACKEND_STORE_URI: sqlite:///mlflow/mlflow.db
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+      - ./backend/chroma_db:/app/chroma_db
+      - ./backend/logs:/app/logs
+    env_file:
+      - .env
+    restart: unless-stopped

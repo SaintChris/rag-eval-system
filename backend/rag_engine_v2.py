@@ -30,7 +30,8 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"          # Local, fast, good quality
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # Local re-ranker
 
 # OpenRouter models — API key set via OPENROUTOR_API_KEY env var
-LLM_MODEL = "openrouter/owl-alpha"           # RAG answer generation — Alex's primary model
+LLM_MODEL = "openrouter/owl-alpha"           # Primary: your paid model, reliable
+LLM_FALLBACK_MODEL = "qwen/qwen3-coder:free"  # Fallback: free, good quality
 JUDGE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"  # Evaluation judge — stronger than generator
 QUERY_EXPAND_MODEL = "google/gemma-4-26b-a4b-it:free"   # Query expansion — fast, creative
 
@@ -60,16 +61,40 @@ def _load_openrouter_key() -> str:
     return os.environ.get("OPENROUTER_API_KEY", "")
 
 OPENROUTER_API_KEY = _load_openrouter_key()
+if OPENROUTER_API_KEY:
+    print(f"[engine] OpenRouter key loaded: {OPENROUTER_API_KEY[:10]}... (len={len(OPENROUTER_API_KEY)})")
+else:
+    print("[engine] WARNING: No OpenRouter key found!")
 
 
 # ── OpenRouter Client ───────────────────────────────────────────────
 
+# Rate-limit tracking per model
+_rate_limit_state: dict[str, dict] = {}
+
+
+def _wait_for_rate_limit(model: str, min_interval: float = 3.0) -> None:
+    """Ensure minimum interval between calls to the same model."""
+    now = time.time()
+    state = _rate_limit_state.get(model, {})
+    last_call = state.get("last_call", 0.0)
+    wait = min_interval - (now - last_call)
+    if wait > 0:
+        time.sleep(wait)
+    _rate_limit_state[model] = {"last_call": time.time()}
+
+
 def call_openrouter(model: str, prompt: str, system_prompt: str = "",
                      temperature: float = 0.2, max_tokens: int = 2048,
-                     retries: int = 3) -> str:
-    """Call any OpenRouter model with rate-limit retry. Falls back to Ollama."""
+                     retries: int = 3, fallback_model: str = "") -> str:
+    """Call any OpenRouter model with rate-limit spacing and retry."""
+    global _rate_limit_state
+
     if not OPENROUTER_API_KEY:
         return call_ollama(prompt, system_prompt, temperature)
+
+    # Per-model rate limiting (3s between calls to same model)
+    _wait_for_rate_limit(model, min_interval=3.0)
 
     url = f"{OPENROUTER_BASE}/chat/completions"
     payload = {
@@ -88,14 +113,33 @@ def call_openrouter(model: str, prompt: str, system_prompt: str = "",
                 "HTTP-Referer": "https://github.com/SaintChris/rag-eval-system"
             })
             if resp.status_code == 429:
-                wait = 2 ** (attempt + 1)
-                print(f"[openrouter] Rate limited, retrying in {wait}s...")
+                # Try fallback model if available
+                if fallback_model and model != fallback_model:
+                    print(f"[openrouter] Rate limited ({model}), trying fallback ({fallback_model})...")
+                    fallback_payload = dict(payload)
+                    fallback_payload["model"] = fallback_model
+                    with httpx.Client(timeout=120.0) as fb_client:
+                        fb_resp = fb_client.post(url, json=fallback_payload, headers={
+                            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                            "HTTP-Referer": "https://github.com/SaintChris/rag-eval-system"
+                        })
+                        if fb_resp.status_code == 200:
+                            content = fb_resp.json()["choices"][0]["message"]["content"].strip()
+                            _rate_limit_state[model] = {"last_call": time.time()}
+                            return content
+                        elif fb_resp.status_code == 429:
+                            print(f"[openrouter] Fallback also rate limited, retrying in {wait}s...")
+                # Exponential backoff: 5s, 10s, 20s
+                wait = 5 * (2 ** attempt)
+                print(f"[openrouter] Rate limited ({model}), retrying in {wait}s...")
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
+            content = resp.json()["choices"][0]["message"]["content"].strip()
+            _rate_limit_state[model] = {"last_call": time.time()}
+            return content
     # Fallback to Ollama after retries exhausted
-    print("[openrouter] Retries exhausted, falling back to Ollama")
+    print(f"[openrouter] Retries exhausted ({model}), falling back to Ollama")
     return call_ollama(prompt, system_prompt, temperature)
 
 
@@ -298,12 +342,14 @@ class RAGEngineV2:
                         stream: bool = True):
         """
         Generate answer with source citations (Fix #8).
-        Uses Qwen3 Coder for generation — strong reasoning, long context.
+        Uses owl-alpha for generation — reliable, strong reasoning.
         """
         if not docs:
             # Fix #3: empty retrieval guard at generation level
-            yield "I don't have enough context to answer this. Try rephrasing or indexing more documents."
-            return
+            result = "I don't have enough context to answer this. Try rephrasing or indexing more documents."
+            if stream:
+                yield result
+            return result
 
         # Build numbered context with source labels
         context_parts = []
@@ -341,26 +387,72 @@ Rules:
 """
         system = "You are a precise RAG assistant. Every claim must be cited with [1], [2], etc."
 
-        def _gen():
-            if OPENROUTER_API_KEY:
-                # Use non-streaming for reliability (streaming has CDN issues on free tier)
-                result = call_openrouter(LLM_MODEL, prompt, system, temperature=0.2, max_tokens=2048)
-                yield result
-            else:
-                result = call_ollama(prompt, system, temperature=0.2)
-                yield result
+        if OPENROUTER_API_KEY:
+            result = call_openrouter(LLM_MODEL, prompt, system, temperature=0.2, max_tokens=2048,
+                                     fallback_model=LLM_FALLBACK_MODEL)
+            print(f"[generate] Model={LLM_MODEL}, Result len={len(result)}, Result[:50]={repr(result[:50])}")
+        else:
+            result = call_ollama(prompt, system, temperature=0.2)
+            print(f"[generate] Ollama, Result len={len(result)}")
 
         if stream:
-            return _gen()
+            yield result
         else:
-            return "".join(_gen())
+            return result
+
+    def generate_answer_sync(self, query: str, docs: list[Document]) -> str:
+        """Non-streaming version — returns string directly."""
+        if not docs:
+            return "I don't have enough context to answer this. Try rephrasing or indexing more documents."
+
+        context_parts = []
+        for i, doc in enumerate(docs, 1):
+            source = doc.metadata.get("source", f"doc-{i}")
+            context_parts.append(f"[{i}] (source: {source})\n{doc.page_content}")
+        context = "\n\n".join(context_parts)
+
+        history_str = ""
+        if self.conversation_history:
+            recent = self.conversation_history[-4:]
+            history_str = "\n\n## Recent conversation:\n"
+            for turn in recent:
+                history_str += f"**{turn['role']}**: {turn['content']}\n"
+
+        prompt = f"""Answer using ONLY the sources below. If the answer cannot be found, say "I don't know."
+
+Rules:
+- Every claim MUST be cited with [1], [2], etc.
+- Be direct and concise.
+- Do not make up information.
+
+{history_str}
+
+## Sources:
+{context}
+
+## Question:
+{query}
+
+## Answer (with citations):
+"""
+        system = "You are a precise RAG assistant. Every claim must be cited with [1], [2], etc."
+
+        if OPENROUTER_API_KEY:
+            result = call_openrouter(LLM_MODEL, prompt, system, temperature=0.2, max_tokens=2048,
+                                     fallback_model=LLM_FALLBACK_MODEL)
+            print(f"[generate] Model={LLM_MODEL}, Result len={len(result)}, Result[:50]={repr(result[:50])}")
+        else:
+            result = call_ollama(prompt, system, temperature=0.2)
+            print(f"[generate] Ollama, Result len={len(result)}")
+        return result
 
     def query(self, query: str, k: int = 3,
               use_expansion: bool = True) -> dict:
         """Full RAG pipeline: retrieve + generate."""
         docs = self.retrieve(query, k=k, use_expansion=use_expansion)
         time.sleep(1)  # Rate-limit spacing before generation
-        answer = "".join(self.generate_answer(query, docs, stream=False))
+        answer = self.generate_answer_sync(query, docs)
+        print(f"[query] Answer len={len(answer)}, Answer[:50]={repr(answer[:50])}")
 
         # Update conversation memory (Fix #5)
         self.conversation_history.append({"role": "user", "content": query})
